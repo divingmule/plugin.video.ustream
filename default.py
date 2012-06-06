@@ -10,7 +10,12 @@ try:
     import json
 except:
     import simplejson as json
+try:
+    import StorageServer
+except:
+    import storageserverdummy as StorageServer
 
+cache = StorageServer.StorageServer("ustream", 24)
 addon = xbmcaddon.Addon('plugin.video.ustream')
 profile = xbmc.translatePath(addon.getAddonInfo('profile'))
 home = addon.getAddonInfo('path')
@@ -18,25 +23,59 @@ icon = xbmc.translatePath( os.path.join( home, 'icon.png' ) )
 fanart = os.path.join( home, 'fanart.jpg' )
 
 
+
+def make_request(url):
+        try:
+            headers = {'User-agent' : 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:6.0) Gecko/20100101 Firefox/6.0',
+                       'Referer' : 'http://www.ustream.tv'}
+            req = urllib2.Request(url,None,headers)
+            response = urllib2.urlopen(req)
+            data = response.read()
+            response.close()
+            return data
+        except urllib2.URLError, e:
+            print 'We failed to open "%s".' % url
+            if hasattr(e, 'reason'):
+                print 'We failed to reach a server.'
+                print 'Reason: ', e.reason
+            if hasattr(e, 'code'):
+                print 'We failed with error code - %s.' % e.code
+                xbmc.executebuiltin("XBMC.Notification(Ustream,HTTP ERROR: "+str(e.code)+",5000,"+icon+")")
+                
+                
+def get_cats():
+        url = 'http://www.ustream.tv'
+        return(make_request(url))
+
+
 def categories():
-        # addDir('Entertainment','http://www.ustream.tv/entertainment',1,'')
-        # addDir('Sports','http://www.ustream.tv/sports',1,'')
-        # addDir('News','http://www.ustream.tv/discovery/live/news',1,'')
-        # addDir('Tech','http://www.ustream.tv/technology',1,'')
-        # addDir('Gaming','http://www.ustream.tv/gaming',1,'')
-        # addDir('Music','http://www.ustream.tv/music',1,'')
-        # addDir('Animals','http://www.ustream.tv/pets-animals',1,'')
-        # addDir('Election 2012','http://www.ustream.tv/election2012',1,'')
-        addDir('All Live','http://www.ustream.tv/discovery/live/all',1,'')
+        data = cache.cacheFunction(get_cats)
+        soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
+        items = soup('ul', attrs={'class' : "categories"})[0]('li')
+        for i in items:
+            try:
+                name = i.a.span.string.replace('\n','').replace('\t','')
+                if name == 'Campaign 2012': continue
+                if name == 'More': continue
+                href = i.a['href']
+                if name == 'Pets & Animals':
+                    href = '/animals'
+                if name == 'Education':
+                    href = '/how-to'
+                if name == 'Spirituality':
+                    href = '/religion'
+                if not '/discovery/live' in href:
+                    href = '/discovery/live'+href
+                url = 'http://www.ustream.tv'+href
+                if name == 'On Air':
+                    name = 'All Live'
+                addDir(name, url, 1, icon)
+            except:
+                continue
 
 
 def index_categorie(url):
-        headers = {'User-agent' : 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:6.0) Gecko/20100101 Firefox/6.0'}
-        req = urllib2.Request(url,None,headers)
-        response = urllib2.urlopen(req)
-        link=response.read()
-        response.close()
-        soup = soup = BeautifulSoup(link, convertEntities=BeautifulSoup.HTML_ENTITIES)
+        soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
         for i in soup('ul',  attrs={'class' : "recordedShowThumbsV4 clearAfter"})[0]('li'):
             try:
                 title = i.img['alt']
@@ -51,6 +90,11 @@ def index_categorie(url):
                     addLiveLink(title.encode('ascii', 'ignore'), url.split('/')[-1], 2, thumb)
             except:
                 pass
+        try:
+            next_page = 'http://www.ustream.tv'+soup('a', attrs={'class' : "pagerButton next rightSide"})[0]['href']
+            addDir('Next Page', next_page, 1, icon)
+        except:
+            pass
             
 
 def resolve_url(url):
@@ -61,26 +105,16 @@ def resolve_url(url):
                 return swfUrl
 
         url = 'http://api.ustream.tv/json/user/%s/listAllChannels?key=D9B39696EF3F310EA840C3A8EFC8306D' % url
-        req = urllib2.Request(url)
-        response = urllib2.urlopen(req)
-        link=response.read()
-        print response.geturl()
-        print response.info()
-        response.close()
-        data = json.loads(link)
+        data = json.loads(make_request(url))
         try:
             channel_id = data['results'][0]['id']
         except: print data
         amf_url = 'http://cgw.ustream.tv/Viewer/getStream/1/%s.amf' % channel_id
         print "amf_url ----- "+amf_url
-        headers = {'User-agent' : 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.13) Gecko/20080311 Firefox/2.0.0.13'}
-        req = urllib2.Request(amf_url,None,headers)
-        response = urllib2.urlopen(req)
-        link=response.read()
-        response.close()
-        match = re.compile('.*(rtmp://.+?)\x00.*').findall(link)
+        amf_data = make_request(amf_url)
+        match = re.compile('.*(rtmp://.+?)\x00.*').findall(amf_data)
         rtmp = match[0]
-        playpath = ' playpath='+re.compile('.*streamName\W\W\W(.+?)[/]*\x00.*').findall(link)[0]
+        playpath = ' playpath='+re.compile('.*streamName\W\W\W(.+?)[/]*\x00.*').findall(amf_data)[0]
         swf = ' swfUrl='+getSwf()
         pageUrl = ' pageUrl='+data['results'][0]['url']
         url = rtmp + playpath + swf + pageUrl + ' swfVfy=1 live=true'
