@@ -14,6 +14,10 @@ try:
     import StorageServer
 except:
     import storageserverdummy as StorageServer
+    
+import pyamf
+
+from pyamf import remoting, amf3, util
 
 cache = StorageServer.StorageServer("ustream", 24)
 addon = xbmcaddon.Addon('plugin.video.ustream')
@@ -21,7 +25,6 @@ profile = xbmc.translatePath(addon.getAddonInfo('profile'))
 home = addon.getAddonInfo('path')
 icon = xbmc.translatePath( os.path.join( home, 'icon.png' ) )
 fanart = os.path.join( home, 'fanart.jpg' )
-
 
 
 def make_request(url):
@@ -108,18 +111,71 @@ def resolve_url(url):
         data = json.loads(make_request(url))
         try:
             channel_id = data['results'][0]['id']
-        except: print data
+        except:
+            print ' --- channel_id exception --- '
+            print data
+            return
         amf_url = 'http://cgw.ustream.tv/Viewer/getStream/1/%s.amf' % channel_id
         print "amf_url ----- "+amf_url
         amf_data = make_request(amf_url)
-        match = re.compile('.*(rtmp://.+?)\x00.*').findall(amf_data)
-        rtmp = match[0]
-        playpath = ' playpath='+re.compile('.*streamName\W\W\W(.+?)[/]*\x00.*').findall(amf_data)[0]
-        swf = ' swfUrl='+getSwf()
-        pageUrl = ' pageUrl='+data['results'][0]['url']
-        url = rtmp + playpath + swf + pageUrl + ' swfVfy=1 live=true'
-        item = xbmcgui.ListItem(path=url)
-        xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, item)
+        print '###########################################'
+        response = remoting.decode(amf_data).bodies[0][1].body
+        print response
+        print response.keys()
+        streams = []
+        if not response['status'] == 'offline':
+            if 'streamVersions' in response.keys():
+                print '--- streamVersions: '+str(len(response['streamVersions']))
+                print response['streamVersions'].keys()
+                if 'streams/live_1' in response['streamVersions'].keys():
+                    print ' --- streams/live_1 keys ---'
+                    print response['streamVersions']['streams/live_1'].keys()
+                    if 'streamVersionCdn' in response['streamVersions']['streams/live_1'].keys():
+                        print'--- streamVersionsCdn: '+str(len(response['streamVersions']['streams/live_1']['streamVersionCdn']))
+                        if len(response['streamVersions']['streams/live_1']['streamVersionCdn']) > 1:
+                            for i in response['streamVersions']['streams/live_1']['streamVersionCdn']:
+                                print response['streamVersions']['streams/live_1']['streamVersionCdn'][i]
+                                cdn_url = response['streamVersions']['streams/live_1']['streamVersionCdn'][i]['cdnStreamUrl']
+                                cdn_path = ' playpath='+response['streamVersions']['streams/live_1']['streamVersionCdn'][i]['cdnStreamName']
+                                streams.append((cdn_url, cdn_path))
+                        else:
+                            print response['streamVersions']['streams/live_1']['streamVersionCdn'][0]
+                    else:
+                        print '------ No streamVersionCdn key! ------'
+                else:
+                    print '------ No streams/live_1 key! ------'
+            else:
+                print '------ No streamVersions key! ------'
+                if 'fmsUrl' in response.keys():
+                    fms_url = response['fmsUrl']
+                    fms_path = response['streamName']+'_1'
+                    streams.append((fms_url, fms_path))
+                if 'liveHttpUrl' in response.keys():
+                    streams.append((response['liveHttpUrl'], None))
+        else:
+            print '---- status key == offline ---- '
+            return
+            
+        print '----- streams ------'
+        print streams
+        if len(streams) > 0:
+            if 'rtmp://' in streams[0][0]:
+                rtmp = streams[0][0]
+                playpath = ' playpath=' + streams[0][1]
+                print rtmp
+                print playpath
+                app = ' app='+rtmp.split('/', 3)[-1]
+                swf = ' swfUrl='+getSwf()
+                pageUrl = ' pageUrl='+data['results'][0]['url']
+                url = rtmp + playpath + swf + pageUrl + app + ' swfVfy=1 live=true'
+            else:
+                print " --- not rtmp, must be m3u8? --- "
+                url = streams[0][0]
+            item = xbmcgui.ListItem(path=url)
+            xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, item)
+        else:
+            print '----- No Streams -----'
+            return
             
 
 def get_params():
