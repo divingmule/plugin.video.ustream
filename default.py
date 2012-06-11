@@ -14,10 +14,7 @@ try:
     import StorageServer
 except:
     import storageserverdummy as StorageServer
-    
-import pyamf
-
-from pyamf import remoting, amf3, util
+from pyamf import remoting
 
 cache = StorageServer.StorageServer("ustream", 24)
 addon = xbmcaddon.Addon('plugin.video.ustream')
@@ -77,11 +74,12 @@ def categories():
                 continue
 
 
-def index_categorie(url):
+def index_category(url):
         soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
         for i in soup('ul',  attrs={'class' : "recordedShowThumbsV4 clearAfter"})[0]('li'):
             try:
                 title = i.img['alt']
+                title += ' - '+i.h4.a.string.strip()
                 thumb = i.img['src']
                 if 'blank' in thumb:
                     thumb = i.img['rel']
@@ -92,81 +90,89 @@ def index_categorie(url):
                 if live == 'LIVE':
                     addLiveLink(title.encode('ascii', 'ignore'), url.split('/')[-1], 2, thumb)
             except:
-                pass
+                continue
         try:
             next_page = 'http://www.ustream.tv'+soup('a', attrs={'class' : "pagerButton next rightSide"})[0]['href']
             addDir('Next Page', next_page, 1, icon)
         except:
             pass
             
+            
+def list_all_channels(user, stream_title):
+        url = 'http://api.ustream.tv/json/user/%s/listAllChannels?key=D9B39696EF3F310EA840C3A8EFC8306D' %user
+        data = json.loads(make_request(url))
+        for i in data['results']:
+            title = i['title']
+            if stream_title in title:
+                if i['status'] == 'live':
+                    # print(title, i['id'])
+                    resolve_url(i['id'])
+                    return
+            else: 
+                print(title, i['status'])
+                print i
+            
 
-def resolve_url(url):
+def resolve_url(stream_id):
         def getSwf():
                 req = urllib2.Request('http://www.ustream.tv/flash/viewer.swf')
                 response = urllib2.urlopen(req)
                 swfUrl = response.geturl()
                 return swfUrl
-
-        url = 'http://api.ustream.tv/json/user/%s/listAllChannels?key=D9B39696EF3F310EA840C3A8EFC8306D' % url
-        data = json.loads(make_request(url))
-        try:
-            channel_id = data['results'][0]['id']
-        except:
-            print ' --- channel_id exception --- '
-            print data
-            return
-        amf_url = 'http://cgw.ustream.tv/Viewer/getStream/1/%s.amf' % channel_id
+        amf_url = 'http://cgw.ustream.tv/Viewer/getStream/1/%s.amf' % stream_id
         print "amf_url ----- "+amf_url
-        amf_data = make_request(amf_url)
-        print '###########################################'
-        response = remoting.decode(amf_data).bodies[0][1].body
-        print response
-        print response.keys()
+        amf_data = remoting.decode(make_request(amf_url)).bodies[0][1].body
+        print amf_data
+        print amf_data.keys()
         streams = []
-        if not response['status'] == 'offline':
-            if 'streamVersions' in response.keys():
-                print '--- streamVersions: '+str(len(response['streamVersions']))
-                print response['streamVersions'].keys()
-                if 'streams/live_1' in response['streamVersions'].keys():
-                    print ' --- streams/live_1 keys ---'
-                    print response['streamVersions']['streams/live_1'].keys()
-                    if 'streamVersionCdn' in response['streamVersions']['streams/live_1'].keys():
-                        print'--- streamVersionsCdn: '+str(len(response['streamVersions']['streams/live_1']['streamVersionCdn']))
-                        if len(response['streamVersions']['streams/live_1']['streamVersionCdn']) > 1:
-                            for i in response['streamVersions']['streams/live_1']['streamVersionCdn']:
-                                print response['streamVersions']['streams/live_1']['streamVersionCdn'][i]
-                                cdn_url = response['streamVersions']['streams/live_1']['streamVersionCdn'][i]['cdnStreamUrl']
-                                cdn_path = ' playpath='+response['streamVersions']['streams/live_1']['streamVersionCdn'][i]['cdnStreamName']
-                                streams.append((cdn_url, cdn_path))
-                        else:
-                            print response['streamVersions']['streams/live_1']['streamVersionCdn'][0]
+        if not amf_data['status'] == 'offline':
+            if 'streamVersions' in amf_data.keys():
+                print '--- streamVersions: '+str(len(amf_data['streamVersions']))
+                print amf_data['streamVersions'].keys()
+                for i in amf_data['streamVersions'].keys():
+                    print ' --- %s ---' %i
+                    if 'streamVersionCdn' in amf_data['streamVersions'][i].keys():
+                        print'--- streamVersionsCdn: '+str(len(amf_data['streamVersions'][i]['streamVersionCdn']))
+                        for cdn in amf_data['streamVersions'][i]['streamVersionCdn']:
+                            print amf_data['streamVersions'][i]['streamVersionCdn'][cdn]
+                            cdn_url = amf_data['streamVersions'][i]['streamVersionCdn'][cdn]['cdnStreamUrl']
+                            cdn_path = amf_data['streamVersions'][i]['streamVersionCdn'][cdn]['cdnStreamName']
+                            streams.append((cdn_url, cdn_path))
                     else:
                         print '------ No streamVersionCdn key! ------'
-                else:
-                    print '------ No streams/live_1 key! ------'
             else:
                 print '------ No streamVersions key! ------'
-                if 'fmsUrl' in response.keys():
-                    fms_url = response['fmsUrl']
-                    fms_path = response['streamName']+'_1'
-                    streams.append((fms_url, fms_path))
-                if 'liveHttpUrl' in response.keys():
-                    streams.append((response['liveHttpUrl'], None))
+            if 'fmsUrl' in amf_data.keys():
+                fms_url = amf_data['fmsUrl']
+                # there may be issues with this path ???
+                fms_path = amf_data['streamName']
+                streams.append((fms_url, fms_path))
+            if 'cdnUrl' in amf_data.keys():
+                cdn_url = amf_data['cdnUrl']
+                cdn_path = amf_data['streamName']
+                streams.append((cdn_url, cdn_path))
+            if 'liveHttpUrl' in amf_data.keys():
+                streams.append((amf_data['liveHttpUrl'], None))
         else:
             print '---- status key == offline ---- '
+            xbmc.executebuiltin("XBMC.Notification(Ustream,Channel Status: Offline,5000,"+icon+")")
             return
             
-        print '----- streams ------'
+        print '----- streams %s ------' %str(len(streams))
         print streams
         if len(streams) > 0:
             if 'rtmp://' in streams[0][0]:
                 rtmp = streams[0][0]
                 playpath = ' playpath=' + streams[0][1]
-                print rtmp
-                print playpath
                 app = ' app='+rtmp.split('/', 3)[-1]
                 swf = ' swfUrl='+getSwf()
-                pageUrl = ' pageUrl='+data['results'][0]['url']
+                try:
+                    pageUrl = ' pageUrl='+amf_data['ads']['info']['url']
+                except:
+                    try:
+                        pageUrl = ' pageUrl='+amf_data['moduleConfig']['meta']['url']
+                    except:
+                        print ' --- pageUrl Exception --- '
                 url = rtmp + playpath + swf + pageUrl + app + ' swfVfy=1 live=true'
             else:
                 print " --- not rtmp, must be m3u8? --- "
@@ -193,7 +199,6 @@ def get_params():
                 splitparams=pairsofparams[i].split('=')
                 if (len(splitparams))==2:
                     param[splitparams[0]]=splitparams[1]
-
         return param
 
         
@@ -270,10 +275,11 @@ if mode==None:
 
 elif mode==1:
     print ""
-    index_categorie(url)
+    index_category(url)
     
 elif mode==2:
     print ""
-    resolve_url(url)
+    stream_title = name.split(' - ')[0]
+    list_all_channels(url, stream_title)
    
 xbmcplugin.endOfDirectory(int(sys.argv[1]))
