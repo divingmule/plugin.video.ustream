@@ -1,0 +1,6 @@
+<settings>
+  <category label="General">
+    <setting id="channel_filter" type="enum" label="Channels Filter" values="All|Featured|Moble" default="0" />
+    <setting id="sort_method" type="enum" label="Sort Channels" values="Most Viewers|Most Total Views (Today)|Most Total Views (Week)|Most Total Views (Month)|Most Total Views (All)" default="0" />
+  </category>
+</settings>

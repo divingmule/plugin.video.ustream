@@ -22,6 +22,8 @@ profile = xbmc.translatePath(addon.getAddonInfo('profile'))
 home = addon.getAddonInfo('path')
 icon = xbmc.translatePath( os.path.join( home, 'icon.png' ) )
 fanart = os.path.join( home, 'fanart.jpg' )
+filter = int(addon.getSetting('channel_filter'))
+sort = int(addon.getSetting('sort_method'))
 
 
 def make_request(url):
@@ -49,12 +51,24 @@ def get_cats():
 
 
 def categories():
+        filter_values = {
+            0 : '',
+            1 : '?filter=featured',
+            2 : '?filter=mobile'
+            }
+        sort_values = {
+            0 : '',
+            1 : 'order=most-views-live&top=day',
+            2 : 'order=most-views-live&top=week',
+            3 : 'order=most-views-live&top=month',
+            4 : 'order=most-views-live'
+            }
         data = cache.cacheFunction(get_cats)
         soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
         items = soup('ul', attrs={'class' : "categories"})[0]('li')
         for i in items:
             try:
-                name = i.a.span.string.replace('\n','').replace('\t','')
+                name = i.a.span.string.strip()
                 if name == 'Campaign 2012': continue
                 if name == 'More': continue
                 href = i.a['href']
@@ -69,6 +83,16 @@ def categories():
                 url = 'http://www.ustream.tv'+href
                 if name == 'On Air':
                     name = 'All Live'
+                    
+                if not filter == 0:
+                    url += filter_values[filter]
+                    if not sort == 0:
+                        url += '&'+sort_values[sort]
+                else:
+                    if not sort == 0:
+                        url += '?'+sort_values[sort]
+                print url
+                    
                 addDir(name, url, 1, icon)
             except:
                 continue
@@ -79,7 +103,8 @@ def index_category(url):
         for i in soup('ul',  attrs={'class' : "recordedShowThumbsV4 clearAfter"})[0]('li'):
             try:
                 title = i.img['alt']
-                title += ' - '+i.h4.a.string.strip()
+                if not title == i.h4.a.string.strip():
+                    title += ' - '+i.h4.a.string.strip()
                 thumb = i.img['src']
                 if 'blank' in thumb:
                     thumb = i.img['rel']
@@ -98,19 +123,23 @@ def index_category(url):
             pass
             
             
-def list_all_channels(user, stream_title):
+def list_all_channels(user, stream_title=None):
         url = 'http://api.ustream.tv/json/user/%s/listAllChannels?key=D9B39696EF3F310EA840C3A8EFC8306D' %user
         data = json.loads(make_request(url))
         for i in data['results']:
             title = i['title']
-            if stream_title in title:
+            if not stream_title == None:
+                if stream_title in title:
+                    if i['status'] == 'live':
+                        return resolve_url(i['id'])
+                    else:
+                        print '---- status key == offline ---- '
+                        xbmc.executebuiltin("XBMC.Notification(Ustream,Channel Status: Offline,5000,"+icon+")")
+                        return
+                else: continue
+            else:
                 if i['status'] == 'live':
-                    # print(title, i['id'])
-                    resolve_url(i['id'])
-                    return
-            else: 
-                print(title, i['status'])
-                print i
+                    addLiveLink(title.encode('ascii', 'ignore'), i['id'], 4, icon, False)
             
 
 def resolve_url(stream_id):
@@ -128,7 +157,6 @@ def resolve_url(stream_id):
         if not amf_data['status'] == 'offline':
             if 'streamVersions' in amf_data.keys():
                 print '--- streamVersions: '+str(len(amf_data['streamVersions']))
-                print amf_data['streamVersions'].keys()
                 for i in amf_data['streamVersions'].keys():
                     print ' --- %s ---' %i
                     if 'streamVersionCdn' in amf_data['streamVersions'][i].keys():
@@ -146,11 +174,18 @@ def resolve_url(stream_id):
                 fms_url = amf_data['fmsUrl']
                 # there may be issues with this path ???
                 fms_path = amf_data['streamName']
+                # if fms_path == 'streams/live':
+                    # fms_path += '_1'
+                    # fms_path += '_2'
+                    # fms_path += '_3'
+                    # fms_path += '_1_'+stream_id
                 streams.append((fms_url, fms_path))
             if 'cdnUrl' in amf_data.keys():
                 cdn_url = amf_data['cdnUrl']
                 cdn_path = amf_data['streamName']
-                streams.append((cdn_url, cdn_path))
+                stream = (cdn_url, cdn_path)
+                if not stream in streams:
+                    streams.append((cdn_url, cdn_path))
             if 'liveHttpUrl' in amf_data.keys():
                 streams.append((amf_data['liveHttpUrl'], None))
         else:
@@ -221,13 +256,16 @@ def addLink(name,url,iconimage):
         return ok
 
 
-def addLiveLink(name,url,mode,iconimage):
+def addLiveLink(name,url,mode,iconimage,showcontext=True):
         u=sys.argv[0]+"?url="+urllib.quote_plus(url)+"&mode="+str(mode)+"&name="+urllib.quote_plus(name)+"&iconimage="+urllib.quote_plus(iconimage)
         ok=True
         liz=xbmcgui.ListItem(name, iconImage="DefaultFolder.png", thumbnailImage=iconimage)
         liz.setInfo( type="Video", infoLabels={ "Title": name } )
         liz.setProperty( "Fanart_Image", fanart)
         liz.setProperty('IsPlayable', 'true')
+        if showcontext:
+            contextMenu = [('List all channels from this user','XBMC.Container.Update(%s?url=%s&mode=3)' %(sys.argv[0], urllib.quote_plus(url)))]
+            liz.addContextMenuItems(contextMenu)
         ok=xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=liz)
         return ok
 
@@ -270,16 +308,19 @@ print "URL: "+str(url)
 print "Name: "+str(name)
 
 if mode==None:
-    print ""
     categories()
 
 elif mode==1:
-    print ""
     index_category(url)
     
 elif mode==2:
-    print ""
     stream_title = name.split(' - ')[0]
     list_all_channels(url, stream_title)
+    
+elif mode==3:
+    list_all_channels(url)
+    
+elif mode==4:
+    resolve_url(url)
    
 xbmcplugin.endOfDirectory(int(sys.argv[1]))

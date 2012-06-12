@@ -5,6 +5,7 @@
        provider-name="">
   <requires>
     <import addon="xbmc.python" version="1.0"/>
+    <import addon="script.module.pyamf"/>
   </requires>
   <extension point="xbmc.python.pluginsource"
             library="default.py">
