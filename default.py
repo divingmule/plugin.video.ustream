@@ -51,52 +51,20 @@ def get_cats():
 
 
 def categories():
-        filter_values = {
-            0 : '',
-            1 : '?filter=featured',
-            2 : '?filter=mobile'
-            }
-        sort_values = {
-            0 : '',
-            1 : 'order=most-views-live&top=day',
-            2 : 'order=most-views-live&top=week',
-            3 : 'order=most-views-live&top=month',
-            4 : 'order=most-views-live'
-            }
-        data = cache.cacheFunction(get_cats)
-        soup = BeautifulSoup(data, convertEntities=BeautifulSoup.HTML_ENTITIES)
-        items = soup('ul', attrs={'class' : "categories"})[0]('li')
-        for i in items:
-            try:
-                name = i.a.span.string.strip()
-                if name == 'Campaign 2012': continue
-                if name == 'More': continue
-                href = i.a['href']
-                if name == 'Pets & Animals':
-                    href = '/animals'
-                if name == 'Education':
-                    href = '/how-to'
-                if name == 'Spirituality':
-                    href = '/religion'
-                if not '/discovery/live' in href:
-                    href = '/discovery/live'+href
-                url = 'http://www.ustream.tv'+href
-                if name == 'On Air':
-                    name = 'All Live'
-                    
-                if not filter == 0:
-                    url += filter_values[filter]
-                    if not sort == 0:
-                        url += '&'+sort_values[sort]
-                else:
-                    if not sort == 0:
-                        url += '?'+sort_values[sort]
-                print url
-                    
-                addDir(name, url, 1, icon)
-            except:
-                continue
-
+    USTREAM_DISCOVERY_URL = 'http://www.ustream.tv/discovery/live/'
+    CATEGORIES      = [
+                        { 'title' :  'On Air', 'path' : 'all'},
+                        { 'title' :  'News', 'path' : 'news'},
+                        { 'title' :  'Pets & Animals', 'path' : 'animals'},
+                        { 'title' :  'Entertainment', 'path' : 'entertainment'},
+                        { 'title' :  'Sports', 'path' : 'sports'},
+                        { 'title' :  'Music', 'path' : 'music'},
+                        { 'title' :  'Gaming', 'path' : 'gaming'},
+                        { 'title' :  'Events', 'path' : 'events'},
+                        { 'title' :  'Tech', 'path' : 'technology'}
+                    ]
+    for cat in CATEGORIES:
+        addDir(cat['title'],USTREAM_DISCOVERY_URL + cat['path'],1,icon)
 
 def index_category(url):
         soup = BeautifulSoup(make_request(url), convertEntities=BeautifulSoup.HTML_ENTITIES)
