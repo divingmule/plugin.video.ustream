@@ -1,20 +1,22 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addon id="plugin.video.ustream"
        name="Ustream"
-       version="0.0.1"
+       version="0.0.2"
        provider-name="divingmule">
   <requires>
-    <import addon="xbmc.python" version="1.0"/>
-	<import addon="script.module.beautifulsoup" version="3.0.8"/>
+    <import addon="xbmc.python" version="2.0"/>
+    <import addon="script.module.beautifulsoup" version="3.0.8"/>
     <import addon="script.module.pyamf"/>
   </requires>
-  <extension point="xbmc.python.pluginsource"
-            library="default.py">
-        <provides>video</provides>
+  <extension point="xbmc.python.pluginsource" library="default.py">
+    <provides>video</provides>
   </extension>
   <extension point="xbmc.addon.metadata">
-    <summary>Ustream.tv</summary>
-    <description>Watch videos from Ustream.tv</description>
+    <summary>Ustream.tv[beta]</summary>
+    <description>
+      Watch videos from Ustream.tv.
+      This is still a work in progress, expect some issues.
+    </description>
     <platform>all</platform>
     <language>en</language>
   </extension>

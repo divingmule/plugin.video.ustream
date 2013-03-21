@@ -1,5 +1,5 @@
-<settings>
+﻿<settings>
   <category label="General">
-    <setting id="stream_type" type="enum" label="Preferred Stream Type if Available" values="HLS (m3u8)|rtmp://ustreamlivefs|rtmp://edgefcs.net" default="1" />
+    <setting id="stream_type" type="enum" label="Preferred Stream Type if Available" values="HLS (m3u8)|Ustream rtmp|Other rtmp|Choose" default="1" />
   </category>
 </settings>

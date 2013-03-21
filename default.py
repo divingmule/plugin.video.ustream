@@ -1,4 +1,4 @@
-import urllib
+﻿import urllib
 import urllib2
 import os
 import re
@@ -239,27 +239,21 @@ def resolve_url(stream_id):
                 streams.append((amf_data['liveHttpUrl'], None))
         else:
             addon_log('status key == offline')
+            xbmc.executebuiltin("XBMC.Notification(Ustream,Channel is Offline,5000,"+icon+")")
             
         addon_log('streams %s' %str(len(streams)))
-        # addon_log(str(streams))
+        addon_log(str(streams))
+        play_url = False
         if len(streams) > 0:
-            succeeded = True
-            hls = False
-            flash = False
-            play_url = False
+            swf = ' swfUrl='+getSwf()
+            stream_urls = {}
             for i in streams:
-                ustream_rtmp = False
-                edge_rtmp = False
-                if '.m3u8' in i[0]:
-                    hls = i[0]
+                if i[0].endswith('.m3u8'):
+                    stream_urls['hls'] = i[0]
                 else:
-                    if 'ustream' in i[0]:
-                        ustream_rtmp = True
-                    else: edge_rtmp = True
                     rtmp = i[0]
                     playpath = ' playpath=' + i[1]
                     app = ' app='+rtmp.split('/', 3)[-1]
-                    swf = ' swfUrl='+getSwf()
                     try:
                         pageUrl = ' pageUrl='+amf_data['ads']['info']['url']
                     except:
@@ -269,27 +263,53 @@ def resolve_url(stream_id):
                             addon_log('pageUrl Exception')
                             continue
                     flash = rtmp + playpath + swf + pageUrl + app + ' swfVfy=1 live=true timeout=30'
-                if pref_stream_type == '0':
-                    if hls:
-                        play_url = hls
-                        break
-                elif pref_stream_type == '1':
-                    if ustream_rtmp:
-                        play_url = flash
-                        break
-                elif pref_stream_type == '2':
-                    if edge_rtmp:
-                        play_url = flash
-                        break
+                    if 'ustreamlivefs' in i[0]:
+                        stream_urls['ustreamlivefs'] = flash
+                    else:
+                        stream_urls['other'] = flash
+            if pref_stream_type == '0':
+                if stream_urls.has_key('hls'):
+                    play_url = get_hls(stream_urls['hls'])
+            if pref_stream_type == '1':
+                if stream_urls.has_key('ustreamlivefs'):
+                    play_url = i
+            if pref_stream_type == '2':
+                if stream_urls.has_key('other'):
+                    play_url = i
+                            
             if not play_url:
-                if flash: play_url = flash
-                elif hls: play_url = hls
+                dialog = xbmcgui.Dialog()
+                ret = dialog.select('Choose a stream type.', stream_urls.keys())
+                play_url = stream_urls.values()[ret]
+                if '.m3u8' in play_url:
+                    play_url = get_hls(play_url)
+        else:
+            addon_log('No Streams')
+                
+        if play_url:
+            print play_url
+            addon_log('Play URL: '+play_url)
+            succeeded = True
         else:
             succeeded = False
             play_url = ''
-            addon_log('No Streams')
         item = xbmcgui.ListItem(path=play_url)
         xbmcplugin.setResolvedUrl(int(sys.argv[1]), succeeded, item)
+        
+        
+def get_hls(url):
+        data = make_request(url)
+        pattern = '#EXT-X-STREAM-INF:.+?,BANDWIDTH=(.+?),.+?\\n(.+?)\\n'
+        streams = re.findall(pattern, data)
+        if streams:
+            best = 0
+            for bandwidth, stream_url in streams:
+                if int(bandwidth) > best:
+                    best = int(bandwidth)
+                    playurl = stream_url
+            return playurl
+        else:
+            return url
             
 
 def get_params():
