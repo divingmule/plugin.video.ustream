@@ -55,7 +55,7 @@ def make_request(url):
 def cache_categories():
         cat_list = []
         soup = BeautifulSoup(make_request(base+'/new'), convertEntities=BeautifulSoup.HTML_ENTITIES)
-        for i in soup.find('li', attrs={'class':"mainmenu categories active"})('li'):
+        for i in soup.find('li', attrs={'class':"mainmenu categories"})('li'):
             cat_list.append((i.a.string, i.a['data-requestpath']))
         return cat_list
         
@@ -309,6 +309,7 @@ def get_hls(url):
                     playurl = stream_url
             return playurl
         else:
+            addon_log('hls resolved url: %s' %url)
             return url
             
 

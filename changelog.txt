@@ -1,3 +1,6 @@
+Version 0.0.3
+fix category caching
+
 Version 0.0.2
 added a choose stream setting
 
